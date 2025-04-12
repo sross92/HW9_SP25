@@ -1,3 +1,5 @@
+#Built off of Dr.Smays Stem file
+#Used ChatGPT to debug and help resolve logic flow in the coding
 #region imports
 from Truss_GUI import Ui_TrussStructuralDesign
 from PyQt5 import QtWidgets as qtw

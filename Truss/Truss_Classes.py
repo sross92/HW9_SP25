@@ -1,3 +1,5 @@
+#Built off of Dr.Smays Stem file
+#Used ChatGPT to debug and help resolve logic flow in the coding as well address responsive issues within the GUI
 #region imports
 import math
 from PyQt5 import QtWidgets as qtw

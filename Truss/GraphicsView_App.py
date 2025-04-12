@@ -1,3 +1,5 @@
+#Built off of Dr.Smays Stem file
+#Used ChatGPT to debug and help resolve logic flow in the coding
 #region imports
 from GraphicsView_GUI import Ui_Form
 import PyQt5.QtGui as qtg
