@@ -140,8 +140,13 @@ class RigidLink(qtw.QGraphicsItem):
         self.transform.rotate(-angLink)
         self.setTransform(self.transform)
         self.transform.reset()
-        stTT=self.name+"\nstart: ({:0.3f}, {:0.3f})\nend:({:0.3f},{:0.3f})\nlength: {:0.3f}\nangle: {:0.3f}".format(self.startX, self.startY, self.endX, self.endY, self.length, self.angle*180/math.pi)
+        stTT = self.name + "\nstart: ({:0.3f}, {:0.3f})\nend: ({:0.3f}, {:0.3f})\nlength: {:0.3f}\nangle: {:0.3f}".format(
+            self.startX, self.startY, self.endX, self.endY, self.length, self.angle * 180 / math.pi)
+        # If a custom extra tooltip (like weight info) is stored, append it.
+        if hasattr(self, "customExtra") and self.customExtra:
+            stTT += "\n" + self.customExtra
         self.setToolTip(stTT)
+
         # brPen=qtg.QPen()
         # brPen.setWidth(0)
         # painter.setPen(brPen)

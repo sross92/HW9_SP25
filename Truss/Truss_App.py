@@ -20,8 +20,9 @@ class MainWindow(Ui_TrussStructuralDesign,qtw.QWidget):
         self.controller.setDisplayWidgets((self.te_DesignReport, self.le_LinkName, self.le_Node1Name,
                                            self.le_Node2Name, self.le_LinkLength, self.gv_Main))
 
-        self.controller.view.scene.installEventFilter(self)  #JES Missing Code:  This calls the function from the view directly. Fix so that it only calls the controller directly.
+        self.controller.setupEventFilter(self)  #This calls the controller directly.
         self.gv_Main.setMouseTracking(True)
+        self.gv_Main.setAttribute(qtc.Qt.WA_AlwaysShowToolTips, True)
 
         self.show()
 
@@ -31,38 +32,15 @@ class MainWindow(Ui_TrussStructuralDesign,qtw.QWidget):
 
     def eventFilter(self, obj, event):
         """
-        This overrides the default eventFilter of the widget.  It takes action on events and then passes the event
+        This overrides the default eventFilter of the widget. It takes action on events and then passes the event
         along to the parent widget.
         :param obj: The object on which the event happened
         :param event: The event itself
         :return: boolean from the parent widget
         """
-        #JES Missing code.  There are several places where functions in view are called directly. Fix these so that the only
-        # function calls are from the controller.
         if obj == self.controller.view.scene:
-            et = event.type()
-            if et == qtc.QEvent.GraphicsSceneMouseMove:
-                scenePos = event.scenePos()
-                strScene = "Mouse Position:  x = {}, y = {}".format(round(scenePos.x(), 2), round(-scenePos.y(), 2))
-                s = self.controller.view.scene.itemAt(scenePos,self.gv_Main.transform())  # gets item from graphics scene under the mouse
-                if s is not None and s.data(0) is not None:  # when creating nodes and pipes, I used the setData() function to store a name
-                    strScene += ' (' + s.data(0) + ')'
-                items=self.controller.view.scene.items(event.scenePos())
-
-                item_names = [item.name if hasattr(item, 'name') else None for item in items]
-                for i in item_names:
-                    strScene += ', '+(i if i is not None else 'none')
-                self.lbl_MousePos.setText(strScene)  # display information in a label
-            if event.type() == qtc.QEvent.GraphicsSceneWheel:  # I added this to zoom on mouse wheel scroll
-                if event.delta() > 0:
-                    self.spnd_Zoom.stepUp()
-                else:
-                    self.spnd_Zoom.stepDown()
-                pass
-            if event.type() == qtc.QEvent.ToolTip:
-                pass
-
-        # pass the event along to the parent widget if there is one.
+            # Delegate handling to the controller by passing relevant widgets
+            self.controller.handleSceneEvent(event, self.gv_Main.transform(), self.lbl_MousePos, self.spnd_Zoom)
         return super(MainWindow, self).eventFilter(obj, event)
 
     def OpenFile(self):

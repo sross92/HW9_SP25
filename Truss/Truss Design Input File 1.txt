@@ -29,11 +29,11 @@ node,  Right, 240,   0
 
 # Links - structural members connecting two nodes
       name    Node-1   Node-2
-link,  1,     Left,    B
-link,  2,     Left,    C
-link,  3,     B,       C
-link,  top,   B,       D
-link,  5,     C,       D
-link,  6,     C,       Right
-link,  7,     D,       Right
+link, 1,     Left,    B, 2.5, 0.5, steel
+link, 2,     Left,    C, 2.0, 0.5, steel
+link, 3,     B,       C, 3.0, 0.6, aluminum
+link, top,   B,       D, 2.8, 0.5, steel
+link, 5,     C,       D, 3.0, 0.6, aluminum
+link, 6,     C,       Right, 2.5, 0.5, steel
+link, 7,     D,       Right, 2.5, 0.5, steel
 

@@ -7,6 +7,58 @@ from GraphicsView_App import RigidLink, RigidPivotPoint
 #endregion
 
 #region class definitions
+from PyQt5.QtWidgets import QToolTip
+
+
+from PyQt5.QtWidgets import QToolTip
+
+class MyRigidLink(RigidLink):
+    def __init__(self, *args, **kwargs):
+        super(MyRigidLink, self).__init__(*args, **kwargs)
+        self.setAcceptHoverEvents(True)
+        self._customToolTip = ""
+        self._tooltipItem = None  # Will hold our custom tooltip item
+
+    def setToolTip(self, tip):
+        self._customToolTip = tip
+        super(MyRigidLink, self).setToolTip(tip)
+
+    def helpEvent(self, event):
+        # Instead of calling QToolTip.showText, we add our own QGraphicsTextItem to the scene.
+        scene = self.scene()  # Get the scene from this item.
+        if scene is None:
+            return
+        # Remove any existing tooltip item for this link.
+        if self._tooltipItem:
+            scene.removeItem(self._tooltipItem)
+            self._tooltipItem = None
+        # Create a new tooltip item.
+        self._tooltipItem = CustomToolTip(self._customToolTip)
+        # Position it near the mouse event's scene position.
+        pos = event.scenePos()
+        self._tooltipItem.setPos(pos)
+        scene.addItem(self._tooltipItem)
+        event.accept()
+
+    def hoverLeaveEvent(self, event):
+        # Remove the custom tooltip when the mouse leaves.
+        if self._tooltipItem:
+            self.scene().removeItem(self._tooltipItem)
+            self._tooltipItem = None
+        super(MyRigidLink, self).hoverLeaveEvent(event)
+
+class CustomToolTip(qtw.QGraphicsTextItem):
+    def __init__(self, text, parent=None):
+        super().__init__(text, parent)
+        # Optionally set styling here:
+        self.setDefaultTextColor(qtg.QColor("black"))
+        self.setZValue(1000)  # Make sure tooltip stays on top
+
+    def updateText(self, text):
+        self.setPlainText(text)
+
+
+
 class Position():
     """
     I made this position for holding a position in 3D space (i.e., a point).  I've given it some ability to do
@@ -189,6 +241,7 @@ class Node():
         self.name = name
         self.position = position if position is not None else Position()
         self.graphic = RigidPivotPoint(position.x, position.y, 10,30)
+        self.verticalLoad = 0.0  # Initialize vertical load to zero.
 
     def __eq__(self, other):
         """
@@ -211,6 +264,10 @@ class Link():
         self.node2_Name=node2
         self.length=None
         self.angleRad=None
+        # New attributes: initialize to None or a default value.
+        self.width = None
+        self.thickness = None
+        self.material = None  # e.g., 'steel' or 'aluminum'
         self.graphic=RigidLink(0,0,1,1)
         self.graphic.name=name
 
@@ -354,7 +411,7 @@ class TrussView():
 
         # clear out the old scene first
         self.scene.clear()
-
+        self.drawLinks(truss=truss)
         # draw a grid
         self.drawAGrid(DeltaX=10, DeltaY=10, Height=abs(rct.height()), Width=abs(rct.width()), CenterX=0, CenterY=0)
         # draw the truss
@@ -408,25 +465,39 @@ class TrussView():
             y -= Dy
 
     def drawLinks(self, truss=None):
-        """
-        I copied most of this code from drawPipes in PipeNetwrok_classes
-        :param truss:
-        :return:
-        """
         scene = self.scene
         truss.getCenterPt()
         rct = truss.rct
         offset = Position(x=rct.centerX(), y=rct.centerY())
 
-        penLink = self.penLink
         for l in truss.links:
             n1 = truss.getNode(l.node1_Name)
             n2 = truss.getNode(l.node2_Name)
-            l.graphic = RigidLink(n1.position.x - offset.x, -(n1.position.y - offset.y), n2.position.x - offset.x,
-                                  -(n2.position.y - offset.y), radius=3, pen=self.penLink, brush=self.brushLink, name="link name = "+l.name)
-            # build a tool tip string
-            st = 'link: ' + l.name + '\n'
-            # assign tool tip string
+            l.graphic = MyRigidLink(n1.position.x - offset.x, -(n1.position.y - offset.y),
+                                    n2.position.x - offset.x, -(n2.position.y - offset.y),
+                                    radius=3, pen=self.penLink, brush=self.brushLink,
+                                    name="link name = " + l.name)
+
+
+            # Enable hover events so tooltips display:
+            l.graphic.setAcceptHoverEvents(True)
+            # Build tooltip string
+            st = 'Link: ' + l.name + '\n'
+
+            # Calculate weight if extra info is present:
+            # (Assuming l.length, l.width, and l.thickness are in consistent units, e.g., inches)
+            if l.width is not None and l.thickness is not None and l.material is not None:
+                if l.material == 'steel':
+                    density = 0.283  # approximate density in lb/in³ for steel
+                elif l.material == 'aluminum':
+                    density = 0.1  # approximate density for aluminum
+                else:
+                    density = 0.283  # fallback to steel if material is unknown
+                volume = l.length * l.width * l.thickness
+                weight = volume * density
+                st += "Weight: {:.2f} lb\n".format(weight)
+            print("Tooltip for link", l.name, ":", st)
+            l.graphic.customExtra = st  # our extra weight info (it should include "Weight:")
             l.graphic.setToolTip(st)
             scene.addItem(l.graphic)
 
@@ -437,12 +508,33 @@ class TrussView():
         for n in truss.nodes:
             x = n.position.x - offset.x
             y = (n.position.y - offset.y)
+            # Base tooltip
             toolTip = "Node: " + n.name
-            if n.name.lower() == 'left' or n.name.lower() == 'right':
+            # If this is a support node, append the computed vertical load.
+            if n.name.lower() in ['left', 'right']:
+                toolTip += "\nVertical Load: {:.2f} lb".format(n.verticalLoad)
+            # Draw the node with appropriate graphic:
+            if n.name.lower() == 'left':
+                # For left node, draw a pin joint (or other appropriate graphic) and update the tooltip.
                 n.graphic = RigidPivotPoint(x, -y, 10, 18, brush=self.brushPivot, name=n.name)
+                # Here, update the tooltip of the left node to include vertical load information.
+                toolTip += "\nJoint: Pin Joint"
+                n.graphic.setToolTip(toolTip)
                 self.scene.addItem(n.graphic)
-            # self.drawACircle(centerX=x,centerY=y,Radius=8,pen=self.penNode,brush=self.brushNode, name=toolTip, tooltip=toolTip)
-            self.drawALabel(x=x - 5, y=y + 15, str=n.name, pen=self.penLabel)
+            elif n.name.lower() == 'right':
+                # Use the roller graphic instead; here we use an ellipse for example.
+                rollerRadius = 10
+                roller = qtw.QGraphicsEllipseItem(x - rollerRadius, -y - rollerRadius, 2 * rollerRadius,
+                                                  2 * rollerRadius)
+                roller.setPen(self.penNode)
+                roller.setBrush(self.brushPivot)
+                # Append an indication that this joint is a roller.
+                toolTip += "\nJoint: Roller"
+                roller.setToolTip(toolTip)
+                n.graphic = roller
+                self.scene.addItem(n.graphic)
+            else:
+                self.drawALabel(x=x - 5, y=y + 15, str=n.name, pen=self.penLabel)
         pass
 
     def drawALabel(self, x, y, str='', pen=None, brush=None, tip=None):
@@ -508,7 +600,7 @@ class TrussController():
             else:
                 Cells=L.split(',')
                 if len(Cells)<=1:
-                    pass  # may contain a keyword but no comma delimited data
+                    pass  # may contain a keyword but no comma-delimited data
                 elif Cells[0].lower().find('material')>=0:
                     sut=float(Cells[1].strip())
                     sy=float(Cells[2].strip())
@@ -526,10 +618,66 @@ class TrussController():
                     name=Cells[1].strip()
                     n1=Cells[2].strip()
                     n2=Cells[3].strip()
-                    self.truss.links.append(Link(name=name, node1=n1, node2=n2))
+                    newLink = Link(name=name, node1=n1, node2=n2)
+                    if len(Cells) >= 7:
+                        try:
+                            newLink.width = float(Cells[4].strip())
+                            newLink.thickness = float(Cells[5].strip())
+                            newLink.material = Cells[6].strip().lower()
+                        except ValueError:
+                            newLink.width = 1.0
+                            newLink.thickness = 1.0
+                            newLink.material = 'steel'
+                    else:
+                        newLink.width = 1.0
+                        newLink.thickness = 1.0
+                        newLink.material = 'steel'
+                    self.truss.links.append(newLink)
         self.calcLinkVals()
+        self.computeSupportLoads()
         self.displayReport()
         self.drawTruss()
+
+    def handleSceneEvent(self, event, transform, labelWidget, zoomSpinner):
+        """
+        Handle events coming from the graphics scene.
+        :param event: The QEvent from the scene.
+        :param transform: The current graphics transform from the view.
+        :param labelWidget: The widget where the mouse position is displayed.
+        :param zoomSpinner: The spinner controlling zoom that will be stepped up/down.
+        """
+        from PyQt5 import QtCore as qtc
+        et = event.type()
+
+        if et == qtc.QEvent.GraphicsSceneMouseMove:
+            scenePos = event.scenePos()
+            # Format the position text
+            strScene = "Mouse Position:  x = {:.2f}, y = {:.2f}".format(scenePos.x(), -scenePos.y())
+
+            # Get the item under the cursor using the view's scene
+            s = self.view.scene.itemAt(scenePos, transform)
+            if s is not None and s.data(0) is not None:
+                strScene += ' (' + s.data(0) + ')'
+
+            # Get all items at the cursor position and add their names
+            items = self.view.scene.items(event.scenePos())
+            item_names = [item.name if hasattr(item, 'name') else None for item in items]
+            for i in item_names:
+                strScene += ', ' + (i if i is not None else 'none')
+
+            # Update the label widget that displays the mouse position
+            labelWidget.setText(strScene)
+
+        elif et == qtc.QEvent.GraphicsSceneWheel:
+            # Zoom based on wheel delta
+            if event.delta() > 0:
+                zoomSpinner.stepUp()
+            else:
+                zoomSpinner.stepDown()
+
+        elif et == qtc.QEvent.ToolTip:
+            # Add any tooltip handling here as necessary
+            pass
 
     def hasNode(self, name):
         for n in self.truss.nodes:
@@ -560,6 +708,36 @@ class TrussController():
                 r=n2.position-n1.position
                 l.length=r.mag()
                 l.angleRad=r.getAngleRad()
+
+    def computeSupportLoads(self):
+        # Initialize the vertical load for support nodes
+        for n in self.truss.nodes:
+            if n.name.lower() in ['left', 'right']:
+                n.verticalLoad = 0.0
+
+        # For each link, compute its weight based on extra info.
+        for l in self.truss.links:
+            if l.width is not None and l.thickness is not None and l.material is not None and l.length is not None:
+                # Choose density based on material
+                if l.material == 'steel':
+                    density = 0.283  # lb/in³ for steel (approximate)
+                elif l.material == 'aluminum':
+                    density = 0.1  # lb/in³ for aluminum (approximate)
+                else:
+                    density = 0.283  # default to steel density
+                volume = l.length * l.width * l.thickness  # assuming units are consistent (e.g., inches)
+                weight = volume * density
+                # Distribute half weight to each end if the end is a support
+                node1 = self.truss.getNode(l.node1_Name)
+                node2 = self.truss.getNode(l.node2_Name)
+                if node1 and node1.name.lower() in ['left', 'right']:
+                    node1.verticalLoad += weight * 0.5
+                if node2 and node2.name.lower() in ['left', 'right']:
+                    node2.verticalLoad += weight * 0.5
+
+    def setupEventFilter(self, parent):
+        # Delegate the event filter installation to the view
+        self.view.scene.installEventFilter(parent)
 
     def setDisplayWidgets(self, args):
         self.view.setDisplayWidgets(args)
